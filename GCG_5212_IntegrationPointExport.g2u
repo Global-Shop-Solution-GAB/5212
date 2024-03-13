@@ -1,0 +1,830 @@
+Program.Sub.Preflight.Start
+V.Global.sFileDateTime.Declare
+V.Global.sFileDate.Declare
+V.Global.sCustomFolder.Declare
+V.Global.bHJE.Declare
+V.Global.bHJI.Declare
+V.Global.dYesterday.Declare(Date,"1/1/1900")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Bix
+'Date: 8/1/2018
+'Customer: H. J. Enterprises
+'GCG_5212_IntegrationPointExport.g2u
+'This program will be hooked onto the task scheduler to export data for Integration Point to receive via FTP
+'Since this program will be running at 12:01 AM, it will need to query for Inventory Transactions for the Day previous
+V.Local.sError.Declare
+V.Local.bFileDir.Declare
+F.Intrinsic.Control.Try
+
+'Set DateTime for files
+F.Intrinsic.Date.DateAdd("d",-1,V.Ambient.Date,V.Global.dYesterday)
+F.Intrinsic.String.Build("{0}T000000",V.Global.dYesterday.FormatYYYYMMDD,V.Global.sFileDateTime)
+F.Intrinsic.String.Left(V.Global.sFileDateTime,8,V.Global.sFileDate)
+
+'Create Global\CUSTOM\5212\CCC\
+F.Intrinsic.String.Build("{0}\CUSTOM\5212\{1}\",V.Caller.GlobalDir,V.Caller.CompanyCode,V.Global.sCustomFolder)
+F.Intrinsic.File.CreateDir(V.Global.sCustomFolder)
+F.Intrinsic.String.Build("{0}\CUSTOM\5212\",V.Caller.GlobalDir,V.Global.sCustomFolder)
+
+F.Intrinsic.Control.CallSub(PopulateItemMasterDataTable)
+F.Intrinsic.Control.CallSub(PopulateFIFODataTable)
+F.Intrinsic.Control.CallSub(PopulateBalReconDataTable)
+F.Intrinsic.Control.CallSub(WriteToItemMasterFile)
+F.Intrinsic.Control.CallSub(WriteToFIFOFile)
+F.Intrinsic.Control.CallSub(WriteToBalReconFile)
+F.Intrinsic.Control.CallSub(UseFTPLibrary)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.PopulateItemMasterDataTable.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sPart.Declare
+V.Local.sRowList.Declare
+V.Local.sManufID.Declare
+V.Local.sStatusCode.Declare
+V.Local.sHTSIndex.Declare
+V.Local.sFile.Declare
+V.Local.iCnt.Declare
+F.Intrinsic.Control.Try
+
+'Collect data needed from DB
+'Use SQL statement to fill in static values for file ('StaticValue' as ColumnName)
+F.ODBC.Connection!con.OpenCompanyConnection(10000)
+F.Intrinsic.String.Build("select left(PART + '                    ', 20) as PART, left(LOCATION + '  ', 2) as LOC, left(PART + '                    ', 20) + left(LOCATION + '  ', 2) as PARTLOC, '117700' as PartnerID, '{0}' as EffDate, rtrim(PART) as ProductNum, rtrim(DESCRIPTION) as ProductDesc, rtrim(UM_INVENTORY) as TxnQtyUOM, 'KG' as WeightUom, AMT_ALT_COST as CommercialValue, '' as CommercialValueCurrencyCode, 'N' as NaftaCertified, '' as MxState, '' as CaProvince, 'E' as UpdatedBy, '' as ReceiptSupplement, '' as RPO11, '' as RPO12, '' as RPO13, AMT_COST, cast(0 as Float) as COST, 0 as Value2, 'USD' as CurrencyCode, 0 as AltValue, 0 as AltValue2, '' as AltCurrencyCode, 0 as HtsUomConvFactor, 0 as AddlHtsUomConvFactor, '' as DOTIndicator, '' as FCCIndicator, '' as FDAIndicator, '' as RCO21, '' as RCO22, '' as RCO23, FLAG_INACTIVE from V_INVENTORY_MSTR where LEFT(PART,2) <> 'HJ' and LEFT(PART,3) <> 'LIT' and LEFT(PART,2) <> 'CF' and PART not like '%MOLD%' and PART not like '%RETURNS%' and PART not like '%CS-%' order by PARTLOC;",V.Global.sFileDateTime,V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtInventoryMaster","con",V.Local.sSQL,True)
+F.Data.DataTable.CreateFromSQL("dtInventoryMaster2","con","select left(PART + '                    ', 20) as PART, left(LOCATION + '  ', 2) as LOC, rtrim(CODE_SOURCE) as CODE_SOURCE, LBS from V_INVENTORY_MST2;",True)
+F.Data.DataTable.CreateFromSQL("dt3613ForeignPart","con","select left(PART + '                 ', 17) as PART, isnull(left(LOC + '  ', 2), '  ') as LOC, ltrim(rtrim(isnull(ZONE_STATUS, '            '))) as StatusCode, isnull(ORIGIN_COUNTRY, '  ') as CountryOfOrigin, isnull(HTSUS_1, '            ') as HTSIndex, isnull(HTSUS_2, '            ') as HTSNum2, isnull(AD_CVD_RATE, cast(0 as Float)) as ADDutyRate, isnull(AD_CVD_CASE, '                    ') as ADCaseNumber, isnull(AD_CVD_RATE, cast(0 as Float)) as CVDutyRate, isnull(AD_CVD_CASE, '                    ') as CVCaseNumber, isnull(MANUF_ID, '            ') as ManufacturerID from GCG_3613_ForeignPart;",True)
+F.Data.Dictionary.CreateFromSQL("dictCost","con","select PART + LOCN as PARTLOC, COST from V_INVENTORY_COST;")
+'check IC Vendor
+F.Intrinsic.Control.If(V.Caller.CompanyCode,=,"HJI")
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.Else
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, '' as IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.EndIf
+F.ODBC.Connection!con.Close
+
+F.Data.Dictionary.SetDefaultReturn("dictCost",0)
+F.Data.DataTable.FillFromDictionary("dtInventoryMaster","dictCost","PARTLOC","COST")
+F.Data.Dictionary.Close("dictCost")
+
+'Convert pounds to kilograms (LBS * 0.453592 = KGS)
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster2","Weight","Float","IIF((LBS * 0.453592) < 0.0001,0.0001,LBS * 0.453592)")
+
+'Convert Code_Sources to Type codes used by IP
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster2","ProductTypeCode","String","IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G','PC',IIF(CODE_SOURCE = 'F' OR CODE_SOURCE = 'M','IM',''))")
+
+'Add column for cost that uses AMT_COST before the COST from the cost table
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster","Value","Float","IIF(AMT_COST = 0,IIF(COST = 0,0.0001,COST),AMT_COST)")
+
+F.Intrinsic.Control.If(V.DataTable.dtInventoryMaster.RowCount,=,0)
+	F.Data.DataTable.Close("dtInventoryMaster")
+	F.Data.DataTable.Close("dtInventoryMaster2")
+	F.Data.DataTable.Close("dtInventoryMaster3")
+	F.Data.DataTable.Close("dt3613ForeignPart")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+'Join DTs into one with order of columns as they will need to appear in the file from left to right
+F.Data.Linq.Join("LeftJoin","DataTable","dtInventoryMaster*!*MSTR","DataTable","dtInventoryMaster2*!*MST2","MSTR.PART = MST2.PART AND MSTR.LOC = MST2.LOC","DataTable","dt3613ForeignPart*!*FOREIGN","MSTR.PART = FOREIGN.PART AND MSTR.LOC = FOREIGN.LOC","DataTable","dtInventoryMaster3*!*MST3","MSTR.PART = MST3.PART and MSTR.LOC = MST3.LOCATION","MSTR.PartnerID*!*MSTR.EffDate*!*MSTR.ProductNum*!*MST2.ProductTypeCode*!*MSTR.ProductDesc*!*MSTR.TxnQtyUOM*!*MST2.Weight*!*MSTR.WeightUoM*!*MSTR.CommercialValue*!*MSTR.CommercialValueCurrencyCode*!*MSTR.NaftaCertified*!*MSTR.MxState*!*MSTR.CaProvince*!*MSTR.UpdatedBy*!*MSTR.ReceiptSupplement*!*MSTR.RPO11*!*MSTR.RPO12*!*MSTR.RPO13*!*FOREIGN.HTSIndex*!*FOREIGN.StatusCode*!*FOREIGN.CountryOfOrigin*!*FOREIGN.ManufacturerID*!*FOREIGN.HTSNum2*!*MSTR.Value*!*MSTR.Value2*!*MSTR.CurrencyCode*!*MSTR.AltValue*!*MSTR.AltValue2*!*MSTR.AltCurrencyCode*!*MSTR.HtsUomConvFactor*!*MSTR.AddlHtsUomConvFactor*!*MSTR.DOTIndicator*!*MSTR.FCCIndicator*!*MSTR.FDAIndicator*!*FOREIGN.ADDutyRate*!*FOREIGN.ADCaseNumber*!*FOREIGN.CVDutyRate*!*FOREIGN.CVCaseNumber*!*MSTR.RCO21*!*MSTR.RCO22*!*MSTR.RCO23","MSTR.Value > 0 and MST3.IC_VENDOR <> 'H-J000' and MSTR.FLAG_INACTIVE <> 'Y'","","","dtItemMaster",True)
+
+'close DTs no longer needed
+F.Data.DataTable.Close("dtInventoryMaster")
+F.Data.DataTable.Close("dtInventoryMaster2")
+F.Data.DataTable.Close("dtInventoryMaster3")
+F.Data.DataTable.Close("dt3613ForeignPart")
+
+F.Intrinsic.String.Build("{0}\GCG_5212_VALUE_DEFAULTS.data",V.Caller.FilesDir,V.Local.sFile)
+F.Intrinsic.File.File2String(V.Local.sFile,V.Local.sFile)
+F.Intrinsic.String.Split(V.Local.sFile,V.Ambient.NewLine,V.Local.sFile)
+F.Intrinsic.String.Split(V.Local.sFile(0),"=",V.Local.sHTSIndex)
+V.Local.sHTSIndex(0).Set(V.Local.sHTSIndex(1).Trim)
+V.Local.sHTSIndex.RedimPreserve(0,0)
+F.Intrinsic.String.Split(V.Local.sFile(1),"=",V.Local.sStatusCode)
+V.Local.sStatusCode(0).Set(V.Local.sStatusCode(1).Trim)
+V.Local.sStatusCode.RedimPreserve(0,0)
+F.Intrinsic.String.Split(V.Local.sFile(2),"=",V.Local.sManufID)
+V.Local.sManufID(0).Set(V.Local.sManufID(1).Trim)
+V.Local.sManufID.RedimPreserve(0,0)
+
+'eliminate duplicate parts
+F.Data.Dictionary.Create("dictPartList")
+F.Data.Dictionary.SetDefaultReturn("dictPartList",-1)
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtItemMaster.RowCount--,1)
+	V.Local.sPart.Set(V.DataTable.dtItemMaster(V.Local.iCnt).ProductNum!FieldVal)
+	F.Intrinsic.Control.If(V.Dictionary.dictPartList![V.Local.sPart],=,-1)
+		F.Data.Dictionary.AddItem("dictPartList",V.Local.sPart,V.Local.iCnt)
+		'correct ManufID, StatusCode, and HTSIndex to their default if they are blank
+		F.Intrinsic.Control.If(V.DataTable.dtItemMaster(V.Local.iCnt).HTSIndex!FieldValTrim,=,"")
+			F.Data.DataTable.SetValue("dtItemMaster",V.Local.iCnt,"HTSIndex",V.Local.sHTSIndex)
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.If(V.DataTable.dtItemMaster(V.Local.iCnt).StatusCode!FieldValTrim,=,"")
+			F.Data.DataTable.SetValue("dtItemMaster",V.Local.iCnt,"StatusCode",V.Local.sStatusCode)
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.If(V.DataTable.dtItemMaster(V.Local.iCnt).ManufacturerID!FieldValTrim,=,"")
+			F.Data.DataTable.SetValue("dtItemMaster",V.Local.iCnt,"ManufacturerID",V.Local.sManufID)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("{0}*!*{1}",V.Local.sRowList,V.Local.iCnt.String,V.Local.sRowList)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.Data.Dictionary.Close("dictPartList")
+
+F.Intrinsic.String.Split(V.Local.sRowList,"*!*",V.Local.sRowList)
+
+F.Intrinsic.Control.For(V.Local.iCnt,V.Local.sRowList.UBound,1,-1)
+	F.Data.DataTable.DeleteRow("dtItemMaster",V.Local.sRowList(V.Local.iCnt).Long)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.Data.DataTable.AcceptChanges("dtItemMaster")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.PopulateItemMasterDataTable.End
+
+Program.Sub.PopulateFIFODataTable.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sFilter.Declare
+F.Intrinsic.Control.Try
+
+'Collect data needed from DB
+'Use SQL statement to fill in static values for file ('StaticValue' as ColumnName)
+F.ODBC.Connection!con.OpenCompanyConnection(10000)
+F.Intrinsic.String.Build("select PART, LOCATION as LOC, PART + LOCATION as PARTLOC, '' as CODE_SOURCE, CODE_TRANSACTION, JOB, SUFFIX, SEQ, '117700' as PartnerID, '{0}' as EffDate, DATE_ACTION, INV_HIST_TIME, TRANSACTION_DESC, rtrim(PART) as ProductNum, '' as ProductTypeCode, 'I' as ProductTypeCodeSource, '' as ProductDesc, 'I' as ProductDescSource, '' as NaftaCertified, 'I' as NaftaCertifiedSource, QUANTITY, 'I' as TxnQtyUomSource, 0 as Weight, 'I' as WeightSource, '' as WeightUom, 'I' as WeightUomSource, '' as ReceiptDocID, '' as ExitDocID, '' as AdjReceiptDocID, '' as AdjProductNum, '' as FromZoneID, '' as ToZoneID, '' as ModeOfTransport, '' as ItNum, '' as BillOfLading, 0 as ManifestQty, 'N' as ValidFlag, 'N' as AssignmentFlag, 'N' as FIFOFlag, '' as ReceiptSupplement, 'I' as ReceiptSupplementSource, '' as RPO11, 'I' as RPO11Source, '' as RPO12, 'I' as RPO12Source, '' as RPO13, 'I' as RPO13Source, '' as StatusCode, 'I' as StatusCodeSource, '' as SpiCode1, 'I' as SpiCode1Source, '' as SpiCode2, 'I' as SpiCode2Source, 'I' as HTSNumSource, '' as CountryOfOrigin, 'I' as CountryOfOriginSource, '' as ManufacturerID, '' as RelationshipFlag, '' as HTSIndex, '' as HTSDesc, 0 as Value2, '' as Value2Source, '' as CurrencyCode, 0 as AltValue, 'I' as AltValueSource, 0 as AltValue2, 'I' as AltValue2Source, '' as AltCurrencyCode, 'I' as AltCurrencyCodeSource, 0 as AdValoremRate, 0 as SpecificRate, 0 as HtsUomConvFactor, 0 as AddlHtsUomConvFactor, '' as RptQtyUom, '' as AddlRptQtyUom, '' as DOTIndicator, '' as FCCIndicator, '' as FDAIndicator, 0 as AddlSpecificRate, 0 as ADDutyRate, 'I' as ADDutyRateSource, '' as ADCaseNumber, 'I' as ADCaseNumberSource, 0 as CVDutyRate, 'I' as CVDutyRateSource, '' as CVCaseNumber, 'I' as CVCaseNumberSource, 'GSS Transaction: ' + CODE_TRANSACTION as RCO21, '' as RCO21Source, '' as RCO22, 'I' as RCO22Source, '' as RCO23, 'I' as RCO23Source, '19000101T000000' as ExportDate, '' as TxnNumGUID, DATE_HISTORY as SYS_DATE, '' as TransportID, '' as CountryShipTo from V_INVENTORY_HIST where DATE_ACTION = '{1}' and LEFT(PART,2) <> 'HJ' and LEFT(PART,3) <> 'LIT' and LEFT(PART,2) <> 'CF' and PART not like '%MOLD%' and PART not like '%RETURNS%' and PART not like '%CS-%';",V.Global.sFileDateTime,V.Global.dYesterday.PervasiveDate,V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtInventoryHistory","con",V.Local.sSQL,True)
+F.Data.DataTable.CreateFromSQL("dtInventoryMaster","con","select PART, LOCATION as LOC, '' as TxnQtyUom, FLAG_INACTIVE from V_INVENTORY_MSTR;",True)
+F.Intrinsic.String.Build("select PURCHASE_ORDER + PO_LINE as PO, PART + LOCATION as PARTLOC, COST as Value from V_PO_HISTORY where DATE_RECEIVED = '{0}';",V.Global.dYesterday.PervasiveDate,V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtPOHistory","con",V.Local.sSQL,True)
+F.Data.DataTable.CreateFromSQL("dt3613ForeignPart","con","select PART as PART, LOC, HTSUS_1 as HTSNum, HTSUS_2 as HTSNum2 from GCG_3613_ForeignPart;",True)
+F.Data.Dictionary.CreateFromSQL("dictCodeSource","con","select PART + LOCATION, rtrim(CODE_SOURCE) as CODE_SOURCE from V_INVENTORY_MST2;")
+'check IC Vendor
+F.Intrinsic.Control.If(V.Caller.CompanyCode,=,"HJI")
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.Else
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, '' as IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.EndIf
+F.ODBC.Connection!con.Close
+
+'Fill in values for Source of Parts from dictionary (doing this now before linq join because they will be needed for the FillInTranasctionValues subroutine)
+F.Data.DataTable.FillFromDictionary("dtInventoryHistory","dictCodeSource","PARTLOC","CODE_SOURCE")
+F.Data.Dictionary.Close("dictCodeSource")
+
+F.Intrinsic.Control.CallSub(FillinTransactionValues)
+F.Intrinsic.Control.CallSub(CalculateQtyPerIM)
+F.Intrinsic.Control.CallSub(FillinShipmentTransportID)
+F.Intrinsic.Control.CallSub(FillinCountryShipTo)
+F.Intrinsic.Control.CallSub(FillinPOContainer)
+
+F.Intrinsic.Control.If(V.DataTable.dtInventoryHistory.RowCount,=,0)
+	F.Data.DataTable.Close("dtInventoryHistory")
+	F.Data.DataTable.Close("dtInventoryMaster")
+	F.Data.DataTable.Close("dtPOHistory")
+	F.Data.DataTable.Close("dt3613ForeignPart")
+	F.Data.DataTable.Close("dtInventoryMaster3")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+'Join DTs into one with order of columns as they will need to appear in the file from left to right
+F.Intrinsic.String.Build("HIST.TxnCode <> '' and MSTR.FLAG_INACTIVE <> 'Y'",V.Global.dYesterday.FormatYYYYMMDD,V.Local.sFilter)
+F.Data.Linq.Join("LeftJoin","DataTable","dtInventoryHistory*!*HIST","DataTable","dtInventoryMaster*!*MSTR","HIST.PART = MSTR.PART AND HIST.LOC = MSTR.LOC","DataTable","dtPOHistory*!*PO_H","HIST.OrderNumReceipt = PO_H.PO","DataTable","dt3613ForeignPart*!*FOREIGN","HIST.PART = FOREIGN.PART AND HIST.LOC = FOREIGN.LOC","HIST.PartnerID*!*HIST.EffDate*!*HIST.TxnNumGUID*!*HIST.TxnCode*!*HIST.TxnDate*!*HIST.OrderNumReceipt*!*HIST.OrderNumWork*!*HIST.OrderNumShip*!*HIST.ProductNum*!*HIST.ProductTypeCode*!*HIST.ProductTypeCodeSource*!*HIST.ProductDesc*!*HIST.ProductDescSource*!*HIST.NaftaCertified*!*HIST.NaftaCertifiedSource*!*HIST.TxnQty*!*MSTR.TxnQtyUom*!*HIST.TxnQtyUomSource*!*HIST.QtyPerIM*!*HIST.Weight*!*HIST.WeightSource*!*HIST.WeightUom*!*HIST.WeightUomSource*!*HIST.CountryShipTo*!*HIST.TransportID*!*HIST.ReceiptDocID*!*HIST.ExitDocID*!*HIST.AdjReceiptDocID*!*HIST.AdjProductNum*!*HIST.FromZoneID*!*HIST.ToZoneID*!*HIST.ModeOfTransport*!*HIST.ReceiptDate*!*HIST.ItNum*!*HIST.BillOfLading*!*HIST.ExportDate*!*HIST.ManifestQty*!*HIST.ValidFlag*!*HIST.AssignmentFlag*!*HIST.FifoFlag*!*HIST.ERPDate*!*HIST.ReceiptSupplement*!*HIST.ReceiptSupplementSource*!*HIST.RPO11*!*HIST.RPO11Source*!*HIST.RPO12*!*HIST.RPO12Source*!*HIST.RPO13*!*HIST.RPO13Source*!*FOREIGN.HTSNum*!*HIST.HTSNumSource*!*HIST.StatusCode*!*HIST.StatusCodeSource*!*HIST.SpiCode1*!*HIST.SpiCode1Source*!*HIST.SpiCode2*!*HIST.SpiCode2Source*!*HIST.CountryOfOrigin*!*HIST.CountryOfOriginSource*!*HIST.ManufacturerID*!*HIST.ManufacturerIDSource*!*HIST.RelationshipFlag*!*HIST.RelationshipFlagSource*!*HIST.TxnDate1*!*HIST.HTSIndex*!*HIST.HTSIndexSource*!*HIST.HTSDesc*!*HIST.HTSDescSource*!*FOREIGN.HTSNum2*!*HIST.HTSNum2Source*!*PO_H.Value*!*HIST.ValueSource*!*HIST.Value2*!*HIST.Value2Source*!*HIST.CurrencyCode*!*HIST.CurrencyCodeSource*!*HIST.AltValue*!*HIST.AltValueSource*!*HIST.AltValue2*!*HIST.AltValue2Source*!*HIST.AltCurrencyCode*!*HIST.AltCurrencyCodeSource*!*HIST.AdValoremRate*!*HIST.AdValoremRateSource*!*HIST.SpecificRate*!*HIST.SpecificRateSource*!*HIST.HtsUomConvFactor*!*HIST.HtsUomConvFactorSource*!*HIST.AddlHtsUomConvFactor*!*HIST.AddlHtsUomConvFactorSource*!*HIST.RptQtyUom*!*HIST.RptQtyUomSource*!*HIST.AddlRptQtyUom*!*HIST.AddlRptQtyUomSource*!*HIST.DOTIndicator*!*HIST.FCCIndicator*!*HIST.FDAIndicator*!*HIST.AddlSpecificRate*!*HIST.AddlSpecificRateSource*!*HIST.ADDutyRate*!*HIST.ADDutyRateSource*!*HIST.ADCaseNumber*!*HIST.ADCaseNumberSource*!*HIST.CVDutyRate*!*HIST.CVDutyRateSource*!*HIST.CVCaseNumber*!*HIST.CVCaseNumberSource*!*HIST.RCO21*!*HIST.RCO21Source*!*HIST.RCO22*!*HIST.RCO22Source*!*HIST.RCO23*!*HIST.RCO23Source*!*HIST.PART*!*HIST.LOC",V.Local.sFilter,"","","dtTEMP",True)
+
+F.Data.Linq.Join("LeftJoin","DataTable","dtTEMP*!*TEMP","DataTable","dtInventoryMaster3*!*MST3","TEMP.PART = MST3.PART and TEMP.LOC = MST3.LOCATION","TEMP.PartnerID*!*TEMP.EffDate*!*TEMP.TxnNumGUID*!*TEMP.TxnCode*!*TEMP.TxnDate*!*TEMP.OrderNumReceipt*!*TEMP.OrderNumWork*!*TEMP.OrderNumShip*!*TEMP.ProductNum*!*TEMP.ProductTypeCode*!*TEMP.ProductTypeCodeSource*!*TEMP.ProductDesc*!*TEMP.ProductDescSource*!*TEMP.NaftaCertified*!*TEMP.NaftaCertifiedSource*!*TEMP.TxnQty*!*TEMP.TxnQtyUom*!*TEMP.TxnQtyUomSource*!*TEMP.QtyPerIM*!*TEMP.Weight*!*TEMP.WeightSource*!*TEMP.WeightUom*!*TEMP.WeightUomSource*!*TEMP.CountryShipTo*!*TEMP.TransportID*!*TEMP.ReceiptDocID*!*TEMP.ExitDocID*!*TEMP.AdjReceiptDocID*!*TEMP.AdjProductNum*!*TEMP.FromZoneID*!*TEMP.ToZoneID*!*TEMP.ModeOfTransport*!*TEMP.ReceiptDate*!*TEMP.ItNum*!*TEMP.BillOfLading*!*TEMP.ExportDate*!*TEMP.ManifestQty*!*TEMP.ValidFlag*!*TEMP.AssignmentFlag*!*TEMP.FifoFlag*!*TEMP.ERPDate*!*TEMP.ReceiptSupplement*!*TEMP.ReceiptSupplementSource*!*TEMP.RPO11*!*TEMP.RPO11Source*!*TEMP.RPO12*!*TEMP.RPO12Source*!*TEMP.RPO13*!*TEMP.RPO13Source*!*TEMP.HTSNum*!*TEMP.HTSNumSource*!*TEMP.StatusCode*!*TEMP.StatusCodeSource*!*TEMP.SpiCode1*!*TEMP.SpiCode1Source*!*TEMP.SpiCode2*!*TEMP.SpiCode2Source*!*TEMP.CountryOfOrigin*!*TEMP.CountryOfOriginSource*!*TEMP.ManufacturerID*!*TEMP.ManufacturerIDSource*!*TEMP.RelationshipFlag*!*TEMP.RelationshipFlagSource*!*TEMP.TxnDate1*!*TEMP.HTSIndex*!*TEMP.HTSIndexSource*!*TEMP.HTSDesc*!*TEMP.HTSDescSource*!*TEMP.HTSNum2*!*TEMP.HTSNum2Source*!*TEMP.Value*!*TEMP.ValueSource*!*TEMP.Value2*!*TEMP.Value2Source*!*TEMP.CurrencyCode*!*TEMP.CurrencyCodeSource*!*TEMP.AltValue*!*TEMP.AltValueSource*!*TEMP.AltValue2*!*TEMP.AltValue2Source*!*TEMP.AltCurrencyCode*!*TEMP.AltCurrencyCodeSource*!*TEMP.AdValoremRate*!*TEMP.AdValoremRateSource*!*TEMP.SpecificRate*!*TEMP.SpecificRateSource*!*TEMP.HtsUomConvFactor*!*TEMP.HtsUomConvFactorSource*!*TEMP.AddlHtsUomConvFactor*!*TEMP.AddlHtsUomConvFactorSource*!*TEMP.RptQtyUom*!*TEMP.RptQtyUomSource*!*TEMP.AddlRptQtyUom*!*TEMP.AddlRptQtyUomSource*!*TEMP.DOTIndicator*!*TEMP.FCCIndicator*!*TEMP.FDAIndicator*!*TEMP.AddlSpecificRate*!*TEMP.AddlSpecificRateSource*!*TEMP.ADDutyRate*!*TEMP.ADDutyRateSource*!*TEMP.ADCaseNumber*!*TEMP.ADCaseNumberSource*!*TEMP.CVDutyRate*!*TEMP.CVDutyRateSource*!*TEMP.CVCaseNumber*!*TEMP.CVCaseNumberSource*!*TEMP.RCO21*!*TEMP.RCO21Source*!*TEMP.RCO22*!*TEMP.RCO22Source*!*TEMP.RCO23*!*TEMP.RCO23Source","MST3.IC_VENDOR <> 'H-J000'","","","dtFIFO",True)
+
+'close DTs no longer needed
+F.Data.DataTable.Close("dtInventoryHistory")
+F.Data.DataTable.Close("dtInventoryMaster")
+F.Data.DataTable.Close("dtPOHistory")
+F.Data.DataTable.Close("dt3613ForeignPart")
+F.Data.DataTable.Close("dtInventoryMaster3")
+F.Data.DataTable.Close("dtTEMP")
+
+'Fill transaction IDs
+F.Intrinsic.Control.CallSub(TxnNumGUIDIncr,"sDT","dtFIFO")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.PopulateFIFODataTable.End
+
+Program.Sub.FillinTransactionValues.Start
+'Integration Point's transaction types requires a more in depth translation. Also adding in date translations and PO, WO and SO info based on IP Txn Code
+V.Local.sError.Declare
+F.Intrinsic.Control.Try
+
+'Translation from GSS txn Code to IP txn Code
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","PosNeg","String","IIF(QUANTITY < 0,'-',IIF(QUANTITY > 0,'+','0'))")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","RPPC","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'P10' OR CODE_TRANSACTION = 'P11' OR CODE_TRANSACTION = 'R11' OR CODE_TRANSACTION = 'W10','RPPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","APPC","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'P16' OR CODE_TRANSACTION = 'P17','APPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","APIM","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'P16' OR CODE_TRANSACTION = 'P17','APIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","RNPC","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'P10' OR CODE_TRANSACTION = 'P11' OR CODE_TRANSACTION = 'R11' OR CODE_TRANSACTION = 'W10','RNPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","PPIM","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'J52' OR CODE_TRANSACTION = 'C52' OR CODE_TRANSACTION = 'S52','PPIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","IPPC","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'J55' OR CODE_TRANSACTION = 'A10','IPPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","IPIM","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'J55' OR CODE_TRANSACTION = 'A10','IPIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","PNIM","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'J52' OR CODE_TRANSACTION = 'C52' OR CODE_TRANSACTION = 'S52','PNIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","INPC","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'J55' OR CODE_TRANSACTION = 'A10','INPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","INIM","String","IIF(PosNeg = '+',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'J55' OR CODE_TRANSACTION = 'A10','INIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","SPIM","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'O35','SPIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","SPPC","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'O35','SPPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ANIM","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'P16' OR CODE_TRANSACTION = 'P17','ANIM',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ANPC","String","IIF(PosNeg = '-',IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'P16' OR CODE_TRANSACTION = 'P17','ANPC',''),''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","XPIM","String","IIF(CODE_SOURCE = 'M' OR CODE_SOURCE = 'F',IIF(CODE_TRANSACTION = 'Q50','XPIM',''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","XPPC","String","IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G',IIF(CODE_TRANSACTION = 'Q50','XPPC',''),'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","TxnCode","String","RPPC + APPC + APIM + RNPC + PPIM + IPPC + IPIM + PNIM + INPC + INIM + SPIM + SPPC + ANIM + ANPC + XPIM + XPPC")
+
+'Sometimes Qty needs to be negated based on IP txn code
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","TxnQty","Float","IIF(TxnCode = 'IPPC' OR TxnCode = 'IPIM' OR TxnCode = 'INPC' OR TxnCode = 'INIM' OR TxnCode = 'SPIM' OR TxnCode = 'SPPC' OR TxnCode = 'ANIM' OR TxnCode = 'ANPC',QUANTITY * -1,QUANTITY)")
+
+'translating date in DBView to YYYYMMDD + 'T000000'
+'STRING_HISTORY converts the date column into a format of M/D/YYYY 12:00:00 AM
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","STRING_HISTORY","String","DATE_ACTION")
+'Converts STRING_HISTORY into YYYYMMDD
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","DateHistory","String","IIF(LEN(STRING_HISTORY) = 22,SUBSTRING(STRING_HISTORY,7,4) + SUBSTRING(STRING_HISTORY,1,2) + SUBSTRING(STRING_HISTORY,4,2),IIF(LEN(STRING_HISTORY) = 21,IIF(SUBSTRING(STRING_HISTORY,2,1) = '/',SUBSTRING(STRING_HISTORY,6,4) + '0' + SUBSTRING(STRING_HISTORY,1,1) + SUBSTRING(STRING_HISTORY,3,2),SUBSTRING(STRING_HISTORY,6,4) + SUBSTRING(STRING_HISTORY,1,2) + '0' + SUBSTRING(STRING_HISTORY,4,1)),SUBSTRING(STRING_HISTORY,5,4) + '0' + SUBSTRING(STRING_HISTORY,1,1) + '0' + SUBSTRING(STRING_HISTORY,3,1)))")
+'Converts YYYYMMDD into YYYYMMDDT000000
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","TxnDate","String","DateHistory + 'T000000'")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","TxnDate1","String","TxnDate")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ReceiptDate","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM',DateHistory + 'T000000','19000101T000000')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ERPDate","String","DateHistory + 'T000000'")
+
+'For specific txn Codes, the PO, WO or SO number is required (sometimes they want a date, though)
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","OrderNumReceipt","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'RNPC',SUBSTRING(TRANSACTION_DESC,4,7) + SUBSTRING(TRANSACTION_DESC,12,4),IIF(TxnCode = 'APPC' OR TxnCode = 'APIM',SUBSTRING(DateHistory,3,6),''))")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","OrderNumWork","String","IIF(TxnCode = 'PPIM' OR TxnCode = 'PNIM' OR TxnCode = 'IPPC' OR TxnCode = 'IPIM' OR TxnCode = 'INPC' OR TxnCode = 'INIM',JOB + SUFFIX,'')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","OrderNumShip","String","IIF(TxnCode = 'SPPC' OR TxnCode = 'SPIM',IIF(SUBSTRING(TRANSACTION_DESC,1,4) = 'INVC',SUBSTRING(TRANSACTION_DESC,8,7),SUBSTRING(TRANSACTION_DESC,9,7)),IIF(TxnCode = 'ANPC' OR TxnCode = 'ANIM',SUBSTRING(DateHistory,3,6),''))")
+
+'Based on Txn Code
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ManufacturerIDSource","String","IIF(TxnCode = 'SPPC' OR TxnCode = 'SPIM' OR TxnCode = 'ANPC' OR TxnCode = 'ANIM','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","RelationShipFlagSource","String","IIF(TxnCode = 'IPPC' OR TxnCode = 'IPIM' OR TxnCode = 'INPC' OR TxnCode = 'INIM','','I')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","HTSIndexSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'SPPC' OR TxnCode = 'SPIM' OR TxnCode = 'ANPC' OR TxnCode = 'ANIM','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","HTSDescSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'SPPC' OR TxnCode = 'SPIM' OR TxnCode = 'ANPC' OR TxnCode = 'ANIM','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","HTSNum2Source","String","IIF(TxnCode = 'RPPC','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","CurrencyCodeSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","AdValoremRateSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'RNPC','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","SpecificRateSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'RNPC','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","HtsUomConvFactorSource","String","IIF(TxnCode = 'PPIM' OR TxnCode = 'PNIM' OR TxnCode = 'IPPC' OR TxnCode = 'IPIM' OR TxnCode = 'INPC' OR TxnCode = 'INIM','','I')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","AddlHtsUomConvFactorSource","String","IIF(TxnCode = 'PPIM' OR TxnCode = 'PNIM' OR TxnCode = 'IPPC' OR TxnCode = 'IPIM' OR TxnCode = 'INPC' OR TxnCode = 'INIM','','I')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","RptQtyUomSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'RNPC','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","AddlRptQtyUomSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'RNPC','I','')")
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","AddlSpecificRateSource","String","IIF(TxnCode = 'RPPC' OR TxnCode = 'APPC' OR TxnCode = 'APIM' OR TxnCode = 'RNPC','I','')")
+
+'Placeholder column
+F.Data.DataTable.AddExpressionColumn("dtInventoryHistory","ValueSource","String","IIF(TxnCode = 'APPC' OR TxnCode = 'APIM','I','')")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.FillinTransactionValues.End
+
+Program.Sub.PopulateBalReconDataTable.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sFilter.Declare
+V.Local.sPart.Declare
+V.Local.sRowList.Declare
+V.Local.iCnt.Declare
+V.Local.fQty.Declare
+F.Intrinsic.Control.Try
+
+'Collect data needed from DB
+'Use SQL statement to fill in static values for file ('StaticValue' as ColumnName)
+F.ODBC.Connection!con.OpenCompanyConnection(10000)
+F.Data.DataTable.CreateFromSQL("dtInventoryMaster2","con","select PART, LOCATION as LOC, CODE_SOURCE from V_INVENTORY_MST2;")
+F.Intrinsic.String.Build("select PART, LOCATION as LOC, PART + LOCATION as PARTLOC, rtrim(PART) as ProductNum, '117700' as PartnerID, '{0}' as EffDate, rtrim(DESCRIPTION) as ProductDesc, QTY_ONHAND as TxnQty, UM_INVENTORY as TxnQtyUom, '{1}' as DATE_YEAR, '{2}' as DATE_MONTH, '{3}' as DATE_DAY, FLAG_INACTIVE, AMT_COST, cast(0 as Float) as COST from V_INVENTORY_MSTR where LEFT(PART,2) <> 'HJ' and LEFT(PART,3) <> 'LIT' and LEFT(PART,2) <> 'CF' and PART not like '%MOLD%' and PART not like '%RETURNS%' and PART not like '%CS-%' order by PARTLOC;",V.Global.sFileDateTime,V.Global.dYesterday.FormatYYYY,V.Global.dYesterday.FormatMM,V.Global.dYesterday.FormatDD,V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtInventoryMaster","con",V.Local.sSQL)
+'check IC Vendor
+F.Intrinsic.Control.If(V.Caller.CompanyCode,=,"HJI")
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.Else
+	F.Data.DataTable.CreateFromSQL("dtInventoryMaster3","con","select PART, LOCATION, '' as IC_VENDOR from V_INVENTORY_MST3;")
+F.Intrinsic.Control.EndIf
+F.Data.Dictionary.CreateFromSQL("dictCost","con","select PART + LOCN as PARTLOC, COST from V_INVENTORY_COST;")
+F.ODBC.Connection!con.Close
+
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster","TxnDate","String","DATE_YEAR + DATE_MONTH + DATE_DAY + 'T000000'")
+
+'Convert Code_Sources to Type codes used by IP
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster2","ProductTypeCode","String","IIF(CODE_SOURCE = 'P' OR CODE_SOURCE = 'J' OR CODE_SOURCE = 'C' OR CODE_SOURCE = 'G','PC',IIF(CODE_SOURCE = 'F' OR CODE_SOURCE = 'M','IM',''))")
+
+F.Data.Dictionary.SetDefaultReturn("dictCost",0)
+F.Data.DataTable.FillFromDictionary("dtInventoryMaster","dictCost","PARTLOC","COST")
+F.Data.Dictionary.Close("dictCost")
+
+'Add column for cost that uses AMT_COST before the COST from the cost table
+F.Data.DataTable.AddExpressionColumn("dtInventoryMaster","Value","Float","IIF(AMT_COST = 0,IIF(COST = 0,0.0001,COST),AMT_COST)")
+
+'Join DTs into one with order of columns as they will need to appear in the file from left to right
+F.Intrinsic.String.Build("MSTR.TxnDate = '{0}T000000'",V.Global.dYesterday.FormatYYYYMMDD,V.Local.sFilter)
+F.Data.Linq.Join("LeftJoin","DataTable","dtInventoryMaster*!*MSTR","DataTable","dtInventoryMaster2*!*MST2","MSTR.PART = MST2.PART and MSTR.LOC = MST2.LOC","DataTable","dtInventoryMaster3*!*MST3","MSTR.PART = MST3.PART and MSTR.LOC = MST3.LOCATION","MSTR.PartnerID*!*MSTR.EffDate*!*MSTR.ProductNum*!*MST2.ProductTypeCode*!*MSTR.TxnDate*!*MSTR.ProductDesc*!*MSTR.TxnQty*!*MSTR.TxnQtyUom","MSTR.Value > 0 and MST3.IC_VENDOR <> 'H-J000' and MSTR.FLAG_INACTIVE <> 'Y'","","","dtBalRecon",True)
+
+F.Data.Dictionary.Create("dictPartList")
+F.Data.Dictionary.SetDefaultReturn("dictPartList",-1)
+F.Data.DataView.Create("dtBalRecon","dvPart",22)
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtBalRecon.RowCount--,1)
+	V.Local.sPart.Set(V.DataTable.dtBalRecon(V.Local.iCnt).ProductNum!FieldVal)
+	F.Intrinsic.Control.If(V.Dictionary.dictPartList![V.Local.sPart],=,-1)
+		F.Data.Dictionary.AddItem("dictPartList",V.Local.sPart,V.Local.iCnt)
+		F.Intrinsic.String.Build("ProductNum = '{0}'",V.DataTable.dtBalRecon(V.Local.iCnt).ProductNum!FieldVal,V.Local.sFilter)
+		F.Data.DataTable.Compute("dtBalRecon","SUM(TxnQty)",V.Local.sFilter,V.Local.fQty)
+		F.Data.DataTable.SetValue("dtBalRecon",V.Local.iCnt,"TxnQty",V.Local.fQty)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("{0}*!*{1}",V.Local.sRowList,V.Local.iCnt.String,V.Local.sRowList)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.Data.Dictionary.Close("dictPartList")
+
+F.Intrinsic.String.Split(V.Local.sRowList,"*!*",V.Local.sRowList)
+
+F.Intrinsic.Control.For(V.Local.iCnt,V.Local.sRowList.UBound,1,-1)
+	F.Data.DataTable.DeleteRow("dtBalRecon",V.Local.sRowList(V.Local.iCnt).Long)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.Data.DataTable.AcceptChanges("dtBalRecon")
+
+'close DTs no longer needed
+F.Data.DataTable.Close("dtInventoryMaster3")
+F.Data.DataTable.Close("dtInventoryMaster2")
+F.Data.DataTable.Close("dtInventoryMaster")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.PopulateBalReconDataTable.End
+
+Program.Sub.WriteToItemMasterFile.Start
+V.Local.sError.Declare
+V.Local.sFileName.Declare
+V.Local.sFilePath.Declare
+V.Local.sDataString.Declare
+V.Local.sCols.Declare
+F.Intrinsic.Control.Try
+
+'Set strings needed
+F.Intrinsic.String.Build("117700_ITEMMASTER_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+F.Intrinsic.Control.If(V.DataTable.dtItemMaster.Exists)
+	'Create DV and send it to a string delimited with pipes and newlines
+	F.Data.DataView.Create("dtItemMaster","dvItemMasterString",22)
+	F.Data.DataView.ToString("dtItemMaster","dvItemMasterString","|",V.Ambient.NewLine,V.Local.sDataString)
+	F.Data.DataView.Close("dtItemMaster","dvItemMasterString")
+	F.Intrinsic.String.Replace(V.DataTable.dtItemMaster.FieldNames,"*!*","|",V.Local.sCols)
+	F.Data.DataTable.Close("dtItemMaster")
+F.Intrinsic.Control.EndIf
+
+'Put the column titles on the first line
+F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sCols,V.Ambient.NewLine,V.Local.sDataString,V.Local.sDataString)
+'Create File and close out DT
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sDataString)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.WriteToItemMasterFile.End
+
+Program.Sub.WriteToFIFOFile.Start
+V.Local.sError.Declare
+V.Local.sFileName.Declare
+V.Local.sFilePath.Declare
+V.Local.sDataString.Declare
+V.Local.sCols.Declare
+F.Intrinsic.Control.Try
+
+'Set strings needed
+F.Intrinsic.String.Build("117700_FIFO_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+F.Intrinsic.Control.If(V.DataTable.dtFIFO.Exists)
+	'Create DV and send it to a string delimited with pipes and newlines
+	F.Data.DataView.Create("dtFIFO","dvFIFOString",22)
+	F.Data.DataView.ToString("dtFIFO","dvFIFOString","|",V.Ambient.NewLine,V.Local.sDataString)
+	F.Data.DataView.Close("dtFIFO","dvFIFOString")
+	F.Intrinsic.String.Replace(V.DataTable.dtFIFO.FieldNames,"*!*","|",V.Local.sCols)
+	F.Data.DataTable.Close("dtFIFO")
+F.Intrinsic.Control.EndIf
+
+'Put the column titles on the first line
+F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sCols,V.Ambient.NewLine,V.Local.sDataString,V.Local.sDataString)
+'Create File and close out DT
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sDataString)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.WriteToFIFOFile.End
+
+Program.Sub.WriteToBalReconFile.Start
+V.Local.sError.Declare
+V.Local.sFileName.Declare
+V.Local.sFilePath.Declare
+V.Local.sDataString.Declare
+V.Local.sCols.Declare
+F.Intrinsic.Control.Try
+
+'Set strings needed
+F.Intrinsic.String.Build("117700_INVBALRECON_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+F.Intrinsic.Control.If(V.DataTable.dtBalRecon.Exists)
+	'Create DV and send it to a string delimited with pipes and newlines
+	F.Data.DataView.Create("dtBalRecon","dvBalReconString",22)
+	F.Data.DataView.ToString("dtBalRecon","dvBalReconString","|",V.Ambient.NewLine,V.Local.sDataString)
+	F.Data.DataView.Close("dtBalRecon","dvBalReconString")
+	F.Intrinsic.String.Replace(V.DataTable.dtBalRecon.FieldNames,"*!*","|",V.Local.sCols)
+	F.Data.DataTable.Close("dtBalRecon")
+F.Intrinsic.Control.EndIf
+
+'Put the column titles on the first line
+F.Intrinsic.String.Build("{0}{1}{2}",V.Local.sCols,V.Ambient.NewLine,V.Local.sDataString,V.Local.sDataString)
+'Create File and close out DT
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sDataString)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.WriteToBalReconFile.End
+
+Program.Sub.UseFTPLibrary.Start
+'Create connection with FTP server and move files over
+V.Local.sError.Declare
+V.Local.sFileName.Declare
+V.Local.sFilePath.Declare
+V.Local.bConnected.Declare
+F.Intrinsic.Control.Try
+
+F.ODBC.Connection!con.OpenCompanyConnection(10000)
+F.Data.DataTable.CreateFromSQL("dtFTP","con","select REMOTE_HOST, REMOTE_PORT, USERNAME, PASSWORD_KEY from GCG_FTP_CONFIG where ARC_ID = '5212';")
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.If(V.DataTable.dtFTP.RowCount,=,0)
+	'Nothing saved in FTP Config table
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+'Use DB values to log on
+F.Communication.FTP.SetProperty("remoteHost",V.DataTable.dtFTP(0).REMOTE_HOST!FieldValTrim)
+F.Communication.FTP.SetProperty("remotePort",V.DataTable.dtFTP(0).REMOTE_PORT!FieldValTrim)
+F.Communication.FTP.SetProperty("User",V.DataTable.dtFTP(0).USERNAME!FieldValTrim)
+F.Communication.FTP.SetProperty("Password",V.DataTable.dtFTP(0).PASSWORD_KEY!FieldValTrim)
+
+F.Data.DataTable.Close("dtFTP")
+
+'Logon
+F.Communication.FTP.Logon
+
+'F.Communication.FTP.ReadProperty("Connected",V.Local.bConnected)
+'F.Intrinsic.Control.If(V.Local.bConnected.Not)
+	'Didn't connect
+'	F.Intrinsic.Control.ExitSub
+'F.Intrinsic.Control.EndIf
+
+'Build strings for file to transfer via FTP
+'ITEM MASTER
+F.Intrinsic.String.Build("117700_ITEMMASTER_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+'Transfer file
+F.Communication.FTP.SetProperty("LocalFile",V.Local.sFilePath)
+F.Communication.FTP.SetProperty("RemoteFile",V.Local.sFileName)
+F.Communication.FTP.SetProperty("TransferMode",2)
+F.Communication.FTP.Upload
+
+'Build strings for file to transfer via FTP
+'FIFO
+F.Intrinsic.String.Build("117700_FIFO_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+'Transfer file
+F.Communication.FTP.SetProperty("LocalFile",V.Local.sFilePath)
+F.Communication.FTP.SetProperty("RemoteFile",V.Local.sFileName)
+F.Communication.FTP.SetProperty("TransferMode",2)
+F.Communication.FTP.Upload
+
+'Build strings for file to transfer via FTP
+'INVENTORY BALANCE RECONCILIATION
+F.Intrinsic.String.Build("117700_INVBALRECON_{1}_{0}.txt",V.Global.sFileDate,V.Caller.CompanyCode,V.Local.sFileName)
+F.Intrinsic.String.Build("{0}{1}\{2}",V.Global.sCustomFolder,V.Caller.CompanyCode,V.Local.sFileName,V.Local.sFilePath)
+
+'Transfer file
+F.Communication.FTP.SetProperty("LocalFile",V.Local.sFilePath)
+F.Communication.FTP.SetProperty("RemoteFile",V.Local.sFileName)
+F.Communication.FTP.SetProperty("TransferMode",2)
+F.Communication.FTP.Upload
+
+'Logoff
+F.Communication.FTP.Logoff
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.UseFTPLibrary.End
+
+Program.Sub.TxnNumGUIDIncr.Start
+'Write Next Txn num to Inv Hist DT
+V.Local.sError.Declare
+V.Local.sFileName.Declare
+V.Local.sFilePath.Declare
+V.Local.sTxnNum.Declare
+V.Local.iCnt.Declare
+F.Intrinsic.Control.Try
+
+V.Local.sFileName.Set("GCG_5212_NextIDNum.txt")
+F.Intrinsic.String.Build("{0}\{1}",V.Ambient.ScriptPath,v.Local.sFileName,V.Local.sFilePath)
+F.Intrinsic.File.File2String(V.Local.sFilePath,V.Local.sTxnNum)
+
+F.Intrinsic.Control.For(V.Local.iCnt,V.DataTable.[V.Args.sDT].RowCount--)
+	F.Data.DataTable.SetValue(V.Args.sDT,V.Local.iCnt,"TxnNumGUID",V.Local.sTxnNum)
+	F.Intrinsic.Control.CallSub(TxnNumNext,"sTxnNum",V.Local.sTxnNum)
+	V.Local.sTxnNum.Set(V.Args.sTxnNumNext)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+
+F.Intrinsic.File.DeleteFile(V.Local.sFilePath)
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sTxnNum)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.TxnNumGUIDIncr.End
+
+Program.Sub.TxnNumNext.Start
+'just need a uniquie ID num for each transaction
+'this method allows 36^50 different possibilities
+V.Local.sError.Declare
+V.Local.sTxnNum.Declare
+V.Local.sTxnNumLeft.Declare
+V.Local.iTxnNum.Declare
+V.Local.iTxnNumLeftLength.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.String.Right(V.Args.sTxnNum,1,V.Local.sTxnNum)
+F.Intrinsic.Math.Sub(V.Args.sTxnNum.Length,1,V.Local.iTxnNumLeftLength)
+F.Intrinsic.String.Left(V.Args.sTxnNum,V.Local.iTxnNumLeftLength,V.Local.sTxnNumLeft)
+
+F.Intrinsic.Control.If(V.Local.sTxnNum.IsNumeric)
+	F.Intrinsic.Control.If(V.Local.sTxnNum,=,"9")
+		V.Local.sTxnNum.Set("A")
+	F.Intrinsic.Control.Else
+		F.Intrinsic.Math.Add(V.Local.sTxnNum.Long,1,V.Local.iTxnNum)
+		V.Local.sTxnNum.Set(V.Local.iTxnNum.String)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Else
+	F.Intrinsic.Control.SelectCase(V.Local.sTxnNum)
+		F.Intrinsic.Control.Case("A")
+			V.Local.sTxnNum.Set("B")
+		F.Intrinsic.Control.Case("B")
+			V.Local.sTxnNum.Set("C")
+		F.Intrinsic.Control.Case("C")
+			V.Local.sTxnNum.Set("D")
+		F.Intrinsic.Control.Case("D")
+			V.Local.sTxnNum.Set("E")
+		F.Intrinsic.Control.Case("E")
+			V.Local.sTxnNum.Set("F")
+		F.Intrinsic.Control.Case("F")
+			V.Local.sTxnNum.Set("G")
+		F.Intrinsic.Control.Case("G")
+			V.Local.sTxnNum.Set("H")
+		F.Intrinsic.Control.Case("H")
+			V.Local.sTxnNum.Set("I")
+		F.Intrinsic.Control.Case("I")
+			V.Local.sTxnNum.Set("J")
+		F.Intrinsic.Control.Case("J")
+			V.Local.sTxnNum.Set("K")
+		F.Intrinsic.Control.Case("K")
+			V.Local.sTxnNum.Set("L")
+		F.Intrinsic.Control.Case("L")
+			V.Local.sTxnNum.Set("M")
+		F.Intrinsic.Control.Case("M")
+			V.Local.sTxnNum.Set("N")
+		F.Intrinsic.Control.Case("N")
+			V.Local.sTxnNum.Set("O")
+		F.Intrinsic.Control.Case("O")
+			V.Local.sTxnNum.Set("P")
+		F.Intrinsic.Control.Case("P")
+			V.Local.sTxnNum.Set("Q")
+		F.Intrinsic.Control.Case("Q")
+			V.Local.sTxnNum.Set("R")
+		F.Intrinsic.Control.Case("R")
+			V.Local.sTxnNum.Set("S")
+		F.Intrinsic.Control.Case("S")
+			V.Local.sTxnNum.Set("T")
+		F.Intrinsic.Control.Case("T")
+			V.Local.sTxnNum.Set("U")
+		F.Intrinsic.Control.Case("U")
+			V.Local.sTxnNum.Set("V")
+		F.Intrinsic.Control.Case("V")
+			V.Local.sTxnNum.Set("W")
+		F.Intrinsic.Control.Case("W")
+			V.Local.sTxnNum.Set("X")
+		F.Intrinsic.Control.Case("X")
+			V.Local.sTxnNum.Set("Y")
+		F.Intrinsic.Control.Case("Y")
+			V.Local.sTxnNum.Set("Z")
+		F.Intrinsic.Control.Case("Z")
+			V.Local.sTxnNum.Set("0")
+			F.Intrinsic.Control.If(V.Local.sTxnNumLeft.Length,!=,0)
+				F.Intrinsic.Control.CallSub(TxnNumNext,"sTxnNum",V.Local.sTxnNumLeft)
+				V.Local.sTxnNumLeft.Set(V.Args.sTxnNumNext)
+			F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndSelect
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("{0}{1}",V.Local.sTxnNumLeft,V.Local.sTxnNum,V.Local.sTxnNum)
+F.Intrinsic.Variable.AddRV("sTxnNumNext",V.Local.sTxnNum)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.TxnNumNext.End
+
+Program.Sub.CalculateQtyPerIM.Start
+V.Local.sError.Declare
+V.Local.sJob.Declare
+V.Local.sSuffix.Declare
+V.Local.sSQL.Declare
+V.Local.sFilter.Declare
+V.Local.fOrderQty.Declare
+V.Local.fMaterialQty.Declare
+V.Local.iCnt.Declare
+F.Intrinsic.Control.Try
+
+F.Data.DataTable.AddColumn("dtInventoryHistory","QtyPerIM","Float",0)
+F.Data.DataView.Create("dtInventoryHistory","dvFG",22,"CODE_TRANSACTION = 'J52'",)
+F.Data.DataView.SetValue("dtInventoryHistory","dvFG",-1,"QtyPerIM",-1)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataView.dtInventoryHistory!dvFG.RowCount--,1)
+	F.Intrinsic.Control.If(V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).QtyPerIM!FieldVal,=,-1)
+		V.Local.fOrderQty.Set(-1)
+		V.Local.fMaterialQty.Set(-1)
+		V.Local.sSuffix.Set(V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).SUFFIX!FieldVal)
+		V.Local.sJob.Set(V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).JOB!FieldVal)
+		F.Intrinsic.String.Build("select QTY_COMPLETED as QTY from V_JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}';",V.Local.sJob,V.Local.sSuffix,V.Local.sSQL)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.fOrderQty)
+		F.Intrinsic.String.Build("select HOURS_ACTUAL as QTY from V_JOB_OPERATIONS where JOB = '{0}' and SUFFIX = '{1}' and LMO = 'M';",V.Local.sJob,V.Local.sSuffix,V.Local.sSQL)
+		F.Data.DataTable.CreateFromSQL("dtMaterialQty","con",V.Local.sSQL)
+		F.Data.DataTable.Compute("dtMaterialQty","SUM(QTY)",,V.Local.fMaterialQty)
+		F.Data.DataTable.Close("dtMaterialQty")
+		F.Intrinsic.String.Build("JOB = '{0}' and SUFFIX = '{1}' and SEQ = '{2}' and CODE_TRANSACTION = 'J52'",V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).JOB!FieldVal,V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).SUFFIX!FieldVal,V.DataView.dtInventoryHistory!dvFG(V.Local.iCnt).SEQ!FieldVal,V.Local.sFilter)
+		F.Data.DataView.SetFilter("dtInventoryHistory","dvFG",V.Local.sFilter)
+		F.Intrinsic.Control.If(V.Local.fMaterialQty,!=,0)
+			F.Intrinsic.Math.Div(V.Local.fOrderQty,V.Local.fMaterialQty,V.Local.fMaterialQty)
+			F.Data.DataView.SetValue("dtInventoryHistory","dvFG",-1,"QtyPerIM",V.Local.fMaterialQty)
+		F.Intrinsic.Control.Else
+			F.Data.DataView.SetValue("dtInventoryHistory","dvFG",-1,"QtyPerIM",0)
+		F.Intrinsic.Control.EndIf
+		F.Data.DataView.SetFilter("dtInventoryHistory","dvFG","CODE_TRANSACTION = 'J52'")
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.CalculateQtyPerIM.End
+
+Program.Sub.FillinShipmentTransportID.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sRet.Declare
+V.Local.iCnt.Declare
+V.Local.dDate.Declare
+F.Intrinsic.Control.Try
+
+'OrderNumShip, TxnQty
+F.Data.DataView.Create("dtInventoryHistory","dvShipment",22,"CODE_TRANSACTION = 'O35'",)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataView.dtInventoryHistory!dvShipment.RowCount--,1)
+	V.Local.dDate.Set(V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).SYS_DATE!FieldVal)
+	F.Intrinsic.String.Build("select ORDER_NO, ORDER_SUFFIX from V_SHIPMENT_LINES where QTY_SHIPPED = -1 * {0} and ORDER_NO = '{1}' and DATE_SHIP = '{2}' and PART = '{3}';",V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).QUANTITY!FieldVal,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).OrderNumShip!FieldVal,V.Local.dDate.PervasiveDate,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).PART!FieldVal,V.Local.sSQL)
+	F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF)
+		'Shipment lines doesn't contain this history record, move to ORDER_HIST
+		F.Intrinsic.String.Build("select ORDER_NO, ORDER_SUFFIX from V_ORDER_HIST_LINE where QTY_SHIPPED = -1 * {0} and ORDER_NO = '{1}' and DATE_SHIPPED = '{2}' and PART = '{3}';",V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).QUANTITY!FieldVal,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).OrderNumShip!FieldVal,V.Local.dDate.PervasiveDate,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).PART!FieldVal,V.Local.sSQL)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+		'Check Order Hist Header for Order with the same values
+		F.Intrinsic.String.Split(V.Local.sRet,"#$#",V.Local.sRet)
+		V.Local.sRet.RedimPreserve(0,0)
+		F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+		F.Intrinsic.String.Build("select PCK_NO from V_ORDER_HIST_HEAD where ORDER_NO = '{0}' and ORDER_SUFFIX = '{1}';",V.Local.sRet(0),V.Local.sRet(1),V.Local.sSQL)
+		V.Local.sRet.Redim(0,0)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.Else
+		'Check shipment Header for Order with the same values
+		F.Intrinsic.String.Split(V.Local.sRet,"#$#",V.Local.sRet)
+		V.Local.sRet.RedimPreserve(0,0)
+		F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+		F.Intrinsic.String.Build("select PCK_NO from V_SHIPMENT_HEADER where ORDER_NO = '{0}' and ORDER_SUFFIX = '{1}';",V.Local.sRet(0),V.Local.sRet(1),V.Local.sSQL)
+		V.Local.sRet.Redim(0,0)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.SetValue("dtInventoryHistory","dvShipment",V.Local.iCnt,"TransportID",V.Local.sRet)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.ODBC.Connection!con.Close
+F.Data.DataView.Close("dtInventoryHistory","dvShipment")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.FillinShipmentTransportID.End
+
+Program.Sub.FillinCountryShipTo.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sRet.Declare
+V.Local.iCnt.Declare
+V.Local.dDate.Declare
+F.Intrinsic.Control.Try
+
+'OrderNumShip, TxnQty
+F.Data.DataView.Create("dtInventoryHistory","dvShipment",22,"CODE_TRANSACTION = 'O35'",)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataView.dtInventoryHistory!dvShipment.RowCount--,1)
+	V.Local.dDate.Set(V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).SYS_DATE!FieldVal)
+	F.Intrinsic.String.Build("select ORDER_NO, ORDER_SUFFIX from V_SHIPMENT_LINES where QTY_SHIPPED = -1 * {0} and ORDER_NO = '{1}' and DATE_SHIP = '{2}' and PART = '{3}';",V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).QUANTITY!FieldVal,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).OrderNumShip!FieldVal,V.Local.dDate.PervasiveDate,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).PART!FieldVal,V.Local.sSQL)
+	F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF)
+		'Shipment lines doesn't contain this history record, move to ORDER_HIST
+		F.Intrinsic.String.Build("select ORDER_NO, ORDER_SUFFIX from V_ORDER_HIST_LINE where QTY_SHIPPED = -1 * {0} and ORDER_NO = '{1}' and DATE_SHIPPED = '{2}' and PART = '{3}';",V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).QUANTITY!FieldVal,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).OrderNumShip!FieldVal,V.Local.dDate.PervasiveDate,V.DataView.dtInventoryHistory!dvShipment(V.Local.iCnt).PART!FieldVal,V.Local.sSQL)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+		'Check Order Hist Header for Order with the same values
+		F.Intrinsic.String.Split(V.Local.sRet,"#$#",V.Local.sRet)
+		V.Local.sRet.RedimPreserve(0,0)
+		F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+		F.Intrinsic.String.Build("select BRANCH from V_ORDER_HIST_HEAD where ORDER_NO = '{0}' and ORDER_SUFFIX = '{1}';",V.Local.sRet(0),V.Local.sRet(1),V.Local.sSQL)
+		V.Local.sRet.Redim(0,0)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.Else
+		'Check shipment Header for Order with the same values
+		F.Intrinsic.String.Split(V.Local.sRet,"#$#",V.Local.sRet)
+		V.Local.sRet.RedimPreserve(0,0)
+		F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+		F.Intrinsic.String.Build("select BRANCH from V_SHIPMENT_HEADER where ORDER_NO = '{0}' and ORDER_SUFFIX = '{1}';",V.Local.sRet(0),V.Local.sRet(1),V.Local.sSQL)
+		V.Local.sRet.Redim(0,0)
+		F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.SetValue("dtInventoryHistory","dvShipment",V.Local.iCnt,"CountryShipTo",V.Local.sRet)
+F.Intrinsic.Control.Next(V.Local.iCnt)
+F.ODBC.Connection!con.Close
+F.Data.DataView.Close("dtInventoryHistory","dvShipment")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.FillinCountryShipTo.End
+
+Program.Sub.FillinPOContainer.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sRet.Declare
+V.Local.iCnt.Declare
+V.Local.dDate.Declare
+F.Intrinsic.Control.Try
+
+'OrderNumReceipt, TxnQty
+F.Data.DataView.Create("dtInventoryHistory","dvReceipt",22,"CODE_TRANSACTION = 'P10' or CODE_TRANSACTION = 'P11'",)
+F.Data.DataView.SetValue("dtInventoryHistory","dvReceipt",-1,"TransportID","~container placeholder~")
+'F.ODBC.Connection!con.OpenCompanyConnection
+'F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataView.dtInventoryHistory!dvReceiptRowCount--,1)
+'	V.Local.dDate.Set(V.DataView.dtInventoryHistory!dvReceipt(V.Local.iCnt).REAL_DATE!FieldVal)
+'	F.Intrinsic.String.Build("select CONTAINER from V_PO_CONTAINER where PO + PO_LINE = '{0}' and SHIP_DATE = '{1}' and RECVD_QTY = {2};",V.DataView.dtInventoryHistory!dvReceipt(V.Local.iCnt).OrderNumReceipt!FieldVal,V.Local.dDate.PervasiveDate,V.DataView.dtInventoryHistory!dvReceipt(V.Local.iCnt).QUANTITY!FieldVal,V.Local.sSQL)
+'	F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+'	F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF,=,False)
+'		F.Data.DataView.SetValue("dtInventoryHistory","dvReceipt",V.Local.iCnt,"TransportID",V.Local.sRet)
+'	F.Intrinsic.Control.EndIf
+'F.Intrinsic.Control.Next(V.Local.iCnt)
+
+F.Data.DataView.Close("dtInventoryHistory","dvReceipt")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.FillinPOContainer.End
