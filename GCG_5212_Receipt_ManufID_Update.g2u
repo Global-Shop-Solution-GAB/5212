@@ -1,0 +1,566 @@
+Program.Sub.ScreenSU.Start
+Gui.F_ManufID..Create
+Gui.F_ManufID..Caption("Set Manufacturer ID")
+Gui.F_ManufID..Size(5340,6390)
+Gui.F_ManufID..MinX(0)
+Gui.F_ManufID..MinY(0)
+Gui.F_ManufID..Position(0,0)
+Gui.F_ManufID..BackColor(-2147483633)
+Gui.F_ManufID..MousePointer(0)
+Gui.F_ManufID..Event(UnLoad,F_ManufID_UnLoad)
+Gui.F_ManufID.frameSingle.Create(Frame)
+Gui.F_ManufID.frameSingle.Size(3300,2235)
+Gui.F_ManufID.frameSingle.Position(-90,-150)
+Gui.F_ManufID.lblSingleMID.Create(Label,"Manufacturer ID",True,1935,255,0,615,540,True,0,"Arial",8,-2147483633,0)
+Gui.F_ManufID.lblSingleMID.Parent("frameSingle")
+Gui.F_ManufID.txtSingleMID.Create(TextBox,"",True,2055,300,0,525,780,True,0,"Arial",8,-2147483643,1)
+Gui.F_ManufID.txtSingleMID.Parent("frameSingle")
+Gui.F_ManufID.txtSingleMID.MaxLength(15)
+Gui.F_ManufID.txtSingleMID.ControlGroup(1)
+Gui.F_ManufID.cmdSingleSave.Create(Button)
+Gui.F_ManufID.cmdSingleSave.Size(1185,465)
+Gui.F_ManufID.cmdSingleSave.Position(675,1365)
+Gui.F_ManufID.cmdSingleSave.Parent("frameSingle")
+Gui.F_ManufID.cmdSingleSave.Caption("Save")
+Gui.F_ManufID.cmdSingleSave.Event(Click,cmdSingleSave_Click)
+Gui.F_ManufID.cmdSingleSave.TabStop(True)
+Gui.F_ManufID.cmdSingleSave.TabIndex(2)
+Gui.F_ManufID.frameMultiple.Create(Frame)
+Gui.F_ManufID.frameMultiple.Size(5475,6375)
+Gui.F_ManufID.frameMultiple.Position(-90,-150)
+Gui.F_ManufID.frameMultiple.Anchor(15)
+Gui.F_ManufID.txtMultipleMID.Create(TextBox,"",True,2055,300,0,2625,780,True,0,"Arial",8,-2147483643,1)
+Gui.F_ManufID.txtMultipleMID.Parent("frameMultiple")
+Gui.F_ManufID.txtMultipleMID.MaxLength(15)
+Gui.F_ManufID.txtMultipleMID.TabStop(True)
+Gui.F_ManufID.txtMultipleMID.TabIndex(3)
+Gui.F_ManufID.lblMultipleMID.Create(Label,"Manufacturer ID",True,1935,255,0,2715,540,True,0,"Arial",8,-2147483633,0)
+Gui.F_ManufID.lblMultipleMID.Parent("frameMultiple")
+Gui.F_ManufID.lblVendor.Create(Label,"Vendor",True,705,255,0,615,540,True,0,"Arial",8,-2147483633,0)
+Gui.F_ManufID.lblVendor.Parent("frameMultiple")
+Gui.F_ManufID.txtVendor.Create(TextBox,"",True,1215,300,0,525,780,True,0,"Arial",8,-2147483643,1)
+Gui.F_ManufID.txtVendor.Parent("frameMultiple")
+Gui.F_ManufID.txtVendor.MaxLength(6)
+Gui.F_ManufID.txtVendor.Event(LostFocus,txtVendor_LostFocus)
+Gui.F_ManufID.txtVendor.TabStop(True)
+Gui.F_ManufID.txtVendor.TabIndex(1)
+Gui.F_ManufID.cmdVendorBRW.Create(Button)
+Gui.F_ManufID.cmdVendorBRW.Size(465,450)
+Gui.F_ManufID.cmdVendorBRW.Position(1950,705)
+Gui.F_ManufID.cmdVendorBRW.Parent("frameMultiple")
+Gui.F_ManufID.cmdVendorBRW.Caption("^")
+Gui.F_ManufID.cmdVendorBRW.Event(Click,cmdVendorBRW_Click)
+Gui.F_ManufID.cmdVendorBRW.TabStop(True)
+Gui.F_ManufID.cmdVendorBRW.TabIndex(2)
+Gui.F_ManufID.gsgcManufID.Create(GsGridControl)
+Gui.F_ManufID.gsgcManufID.Size(5220,4185)
+Gui.F_ManufID.gsgcManufID.Position(90,2070)
+Gui.F_ManufID.gsgcManufID.Parent("frameMultiple")
+Gui.F_ManufID.gsgcManufID.TabStop(True)
+Gui.F_ManufID.gsgcManufID.TabIndex(6)
+Gui.F_ManufID.gsgcManufID.Anchor(15)
+Gui.F_ManufID.cmdAdd.Create(Button)
+Gui.F_ManufID.cmdAdd.Size(1185,465)
+Gui.F_ManufID.cmdAdd.Position(675,1365)
+Gui.F_ManufID.cmdAdd.Parent("frameMultiple")
+Gui.F_ManufID.cmdAdd.Caption("Add")
+Gui.F_ManufID.cmdAdd.TabStop(True)
+Gui.F_ManufID.cmdAdd.TabIndex(4)
+Gui.F_ManufID.cmdAdd.Event(Click,cmdAdd_Click)
+Gui.F_ManufID.cmdMultipleSave.Create(Button)
+Gui.F_ManufID.cmdMultipleSave.Size(1185,465)
+Gui.F_ManufID.cmdMultipleSave.Position(3435,1365)
+Gui.F_ManufID.cmdMultipleSave.Parent("frameMultiple")
+Gui.F_ManufID.cmdMultipleSave.TabStop(True)
+Gui.F_ManufID.cmdMultipleSave.TabIndex(5)
+Gui.F_ManufID.cmdMultipleSave.Caption("Save")
+Gui.F_ManufID.cmdMultipleSave.Event(Click,cmdMultipleSave_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.F_ManufID_UnLoad.Start
+F.Intrinsic.Control.End
+Program.Sub.F_ManufID_UnLoad.End
+
+Program.Sub.cmdSingleSave_Click.Start
+V.Local.sError.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.If(V.DataTable.dtManufID(0).MANUF_ID!FieldValTrim,!=,V.Screen.F_ManufID!txtSingleMID.Text.Trim)
+	F.Data.DataTable.SetValue("dtManufID",0,"MANUF_ID",V.Screen.F_ManufID!txtSingleMID.Text.Trim)
+	F.ODBC.Connection!con.OpenCompanyConnection
+	F.Data.DataTable.SaveToDB("dtManufID","con","GCG_5212_VEN_MID","VENDOR",256)
+	F.ODBC.Connection!con.Close
+	F.Data.DataTable.AcceptChanges("dtManufID")
+	F.Intrinsic.UI.Msgbox("Saved!")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdSingleSave_Click.End
+
+Program.Sub.cmdVendorBRW_Click.Start
+V.Local.sError.Declare
+V.Local.sRet.Declare
+V.Local.sFilter.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.UI.Browser(300,,V.Local.sRet)
+
+F.Intrinsic.Control.If(V.Local.sRet.IsNotCancel)
+	F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+	V.Local.sRet.RedimPreserve(0,0)
+	'Check if the Vendor has been added already
+	F.Intrinsic.String.Build("VENDOR = '{0}'",V.Local.sRet.Trim,V.Local.sFilter)
+	F.Data.DataView.Create("dtManufID","dvVendor",22,V.Local.sFilter,)
+	F.Intrinsic.Control.If(V.DataView.dtManufID!dvVendor.RowCount,>,0)
+		F.Intrinsic.UI.Msgbox("Vendor already added.")
+		Gui.F_ManufID.txtVendor.Text("")
+		Gui.F_ManufID.cmdVendorBRW.SetFocus
+	F.Intrinsic.Control.Else
+		Gui.F_ManufID.txtVendor.Text(V.Local.sRet.Trim)
+		Gui.F_ManufID.txtMultipleMID.SetFocus
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtManufID","dvVendor")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdVendorBRW_Click.End
+
+Program.Sub.cmdAdd_Click.Start
+V.Local.sError.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.If(V.Screen.F_ManufID!txtVendor.Text.Trim,!=,"","and",V.Screen.F_ManufID!txtMultipleMID.Text.Trim,!=,"")
+	F.Data.DataTable.AddRow("dtManufID","VENDOR",V.Screen.F_ManufID!txtVendor.Text.Trim,"MANUF_ID",V.Screen.F_ManufID!txtMultipleMID.Text.Trim)
+	Gui.F_ManufID.txtVendor.Text("")
+	Gui.F_ManufID.txtMultipleMID.Text("")
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdAdd_Click.End
+
+Program.Sub.cmdMultipleSave_Click.Start
+V.Local.sError.Declare
+F.Intrinsic.Control.Try
+
+F.Data.DataView.Create("dtManufID","dvChanged",20)
+F.Intrinsic.Control.If(V.DataView.dtManufID!dvChanged.RowCount,>,0)
+	F.ODBC.Connection!con.OpenCompanyConnection
+	F.Data.DataTable.SaveToDB("dtManufID","con","GCG_5212_VEN_MID","VENDOR",256)
+	F.ODBC.Connection!con.Close
+	F.Data.DataTable.AcceptChanges("dtManufID")
+	F.Intrinsic.UI.Msgbox("Changes have been updated in the database.")
+F.Intrinsic.Control.EndIf
+F.Data.DataView.Close("dtManufID","dvChanged")
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdMultipleSave_Click.End
+
+Program.Sub.txtVendor_LostFocus.Start
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sFilter.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.If(V.Screen.F_ManufID!txtVendor.Text.Trim,=,"")
+	Gui.F_ManufID.txtVendor.Text("")
+	Gui.F_ManufID.cmdVendorBRW.SetFocus
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("select VENDOR from V_VENDOR_MASTER where VENDOR = '{0}';",V.Screen.F_ManufID!txtVendor.Text.Trim,V.Local.sSQL)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.ODBC.Connection!con.OpenRecordsetRO("rstVendor",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.con!rstVendor.EOF)
+	F.Intrinsic.UI.Msgbox("Vendor could not be found.")
+	Gui.F_ManufID.txtVendor.Text("")
+	Gui.F_ManufID.txtVendor.SetFocus
+F.Intrinsic.Control.Else
+	'Check if the Vendor has been added already
+	F.Intrinsic.String.Build("VENDOR = '{0}'",V.ODBC.con!rstVendor.FieldValTrim!VENDOR,V.Local.sFilter)
+	F.Data.DataView.Create("dtManufID","dvVendor",22,V.Local.sFilter,)
+	F.Intrinsic.Control.If(V.DataView.dtManufID!dvVendor.RowCount,>,0)
+		F.Intrinsic.UI.Msgbox("Vendor already added.")
+		Gui.F_ManufID.txtVendor.Text("")
+		Gui.F_ManufID.txtVendor.SetFocus
+	F.Intrinsic.Control.Else
+		Gui.F_ManufID.txtVendor.Text(V.ODBC.con!rstVendor.FieldValTrim!VENDOR)
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtManufID","dvVendor")
+F.Intrinsic.Control.EndIf
+F.ODBC.con!rstVendor.Close
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.txtVendor_LostFocus.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Bix
+'Date: 6/3/2019
+'GCG_5212_Receipt_ManufID_Update.g2u
+'Updates Part ManufID with Vendor ManufID on PO Receipt
+V.Local.sError.Declare
+V.Local.sErrFile.Declare
+V.Local.bFileCheck.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+	F.Intrinsic.Control.Case("14460")
+		'Vendor Master Populate Screen Hook
+		V.Passed.000024.Set("Manuf ID")
+	F.Intrinsic.Control.Case("14500")
+		'Vendor Master Script 3 Button Hook
+		F.Intrinsic.Control.If(V.Passed.000002.Trim,!=,"")
+			F.Intrinsic.Control.If(V.Caller.Switches,=,"O","or",V.Caller.Switches,=,"N")
+				F.Intrinsic.Control.CallSub(OpenSingleManufID,"Vendor",V.Passed.000002)
+			F.Intrinsic.Control.ElseIf(V.Caller.Switches,=,"V","or",V.Caller.Switches,=,"D")
+				F.Intrinsic.Control.CallSub(ViewSingleManufID,"Vendor",V.Passed.000002)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			F.Intrinsic.UI.Msgbox("Vendor Number is blank!")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Case("15040")
+		'PO Receipts Post Ok Hook
+		F.Intrinsic.Control.CallSub(ReadReceiptsBDF,"Vendor",V.Passed.000004,"BDFFile",V.Passed.AUX001,"PartColumn","Part Number","LocColumn","Loc","QtyColumn","Received")
+	F.Intrinsic.Control.Case("31951")
+		'Post Process P10 Mobile Hook
+		F.Intrinsic.String.Build("{0}\5212_PO_RECEIPT_MOBILE_ERR_{1}.txt",V.Caller.FilesDir,V.Caller.CompanyCode,V.Local.sErrFile)
+		F.Intrinsic.File.Exists(V.Local.sErrFile,V.Local.bFileCheck)
+		F.Intrinsic.Control.If(V.Local.bFileCheck.Not)
+			F.Intrinsic.File.String2File(V.Local.sErrFile,"")
+		F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.CallSub(ReadReceiptsWirelessLine,"TransID",V.Passed.DATA-TRANSID)
+	F.Intrinsic.Control.CaseElse
+		'Run From Menu Item
+		F.Intrinsic.Control.CallSub(OpenMultipleManufID)
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.If(V.Caller.Hook,!=,"31951")
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("{0}\5212_PO_RECEIPT_MOBILE_ERR_{1}.txt",V.Caller.FilesDir,V.Caller.CompanyCode,V.Local.sErrFile)
+		F.Intrinsic.File.File2String(V.Local.sErrFile,V.Local.sError)
+		F.Intrinsic.String.Build("{0}Project: {1}{2}{2}Subroutine: {3}{2}Error Occurred {4} with description {5}{2}{2}GAB Version: {6}{2}{2}Date:{7} Time:{8}{2}{2} ",V.Local.sError,V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Ambient.Date.PervasiveDate,V.Ambient.Time,V.Local.sError)
+		F.Intrinsic.File.String2File(V.Local.sErrFile,V.Local.sError)
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.OpenSingleManufID.Start
+'V.Args.Vendor
+'Open Manuf ID screen for one vendor with editable qualities
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sIcon.Declare
+F.Intrinsic.Control.Try
+
+'Check that Vendor is in the DB
+F.Intrinsic.String.Build("select VENDOR from V_VENDOR_MASTER where VENDOR = '{0}';",V.Args.Vendor,V.Local.sSQL)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.ODBC.Connection!con.OpenRecordsetRO("rstVendor",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.con!rstVendor.EOF)
+	F.Intrinsic.UI.Msgbox("Save Vendor to DB before editing Manuf ID")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+F.ODBC.con!rstVendor.Close
+'Get Vendor ManufID Number
+F.Intrinsic.String.Build("select VENDOR, MANUF_ID from GCG_5212_VEN_MID where VENDOR = '{0}';",V.Args.Vendor,V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtManufID","con",V.Local.sSQL,True)
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.If(V.DataTable.dtManufID.RowCount,>,0)
+	Gui.F_ManufID.txtSingleMID.Text(V.DataTable.dtManufID(0).MANUF_ID!FieldValTrim)
+F.Intrinsic.Control.Else
+	F.Data.DataTable.AddRow("dtManufID","VENDOR",V.Args.Vendor,"MANUF_ID","")
+F.Intrinsic.Control.EndIf
+
+Gui.F_ManufID.frameMultiple.Visible(False)
+Gui.F_ManufID.frameMultiple.Enabled(False)
+Gui.F_ManufID.frameSingle.Visible(True)
+Gui.F_ManufID..Size(3000,2300)
+F.Intrinsic.String.Build("{0}\gss2.ico",V.Caller.GasDir,V.Local.sIcon)
+Gui.F_ManufID..Icon(V.Local.sIcon)
+Gui.F_ManufID..Sizeable(False)
+Gui.F_ManufID..MaxButton(False)
+Gui.F_ManufID..Show
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.OpenSingleManufID.End
+
+Program.Sub.ViewSingleManufID.Start
+'V.Args.Vendor
+'Open manuf ID for one vendor without editable qualities
+V.Local.sError.Declare
+V.Local.sSQL.Declare
+V.Local.sIcon.Declare
+F.Intrinsic.Control.Try
+
+'Get Vendor ManufID Number
+F.Intrinsic.String.Build("select VENDOR, MANUF_ID from GCG_5212_VEN_MID where VENDOR = '{0}';",V.Args.Vendor,V.Local.sSQL)
+F.ODBC.Connection!con.OpenCompanyConnection
+F.Data.DataTable.CreateFromSQL("dtManufID","con",V.Local.sSQL,True)
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.If(V.DataTable.dtManufID.RowCount,>,0)
+	Gui.F_ManufID.txtSingleMID.Text(V.DataTable.dtManufID(0).MANUF_ID!FieldValTrim)
+F.Intrinsic.Control.Else
+	F.Data.DataTable.AddRow("dtManufID","VENDOR",V.Args.Vendor,"MANUF_ID","")
+F.Intrinsic.Control.EndIf
+
+Gui.F_ManufID.frameMultiple.Visible(False)
+Gui.F_ManufID.frameMultiple.Enabled(False)
+Gui.F_ManufID.frameSingle.Visible(True)
+Gui.F_ManufID.frameSingle.Enabled(False)
+Gui.F_ManufID..Size(3000,2300)
+F.Intrinsic.String.Build("{0}\gss2.ico",V.Caller.GasDir,V.Local.sIcon)
+Gui.F_ManufID..Icon(V.Local.sIcon)
+Gui.F_ManufID..Sizeable(False)
+Gui.F_ManufID..MaxButton(False)
+Gui.F_ManufID..Show
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.ViewSingleManufID.End
+
+Program.Sub.OpenMultipleManufID.Start
+'Open Manuf ID screen for all vendors
+V.Local.sError.Declare
+V.Local.sIcon.Declare
+F.Intrinsic.Control.Try
+
+'Get all Vendor Manuf_IDs
+F.ODBC.Connection!con.OpenCompanyConnection
+F.Data.DataTable.CreateFromSQL("dtManufID","con","select VENDOR, rtrim(MANUF_ID) as MANUF_ID from GCG_5212_VEN_MID order by VENDOR;",True)
+F.ODBC.Connection!con.Close
+
+Gui.F_ManufID.gsgcManufID.AddGridviewFromDatatable("gvManufID","dtManufID")
+
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","VENDOR","Caption","Vendor")
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","VENDOR","ReadOnly",True)
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","VENDOR","AllowEdit",False)
+
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","MANUF_ID","Caption","Manufacturer ID")
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","MANUF_ID","ReadOnly",False)
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","MANUF_ID","AllowEdit",True)
+Gui.F_ManufID.gsgcManufID.SetColumnProperty("gvManufID","MANUF_ID","MaxLength",15)
+
+Gui.F_ManufID.gsgcManufID.MainView("gvManufID")
+
+Gui.F_ManufID.frameMultiple.Visible(True)
+Gui.F_ManufID.frameSingle.Visible(False)
+Gui.F_ManufID.frameSingle.Enabled(False)
+Gui.F_ManufID..Size(5340,6390)
+F.Intrinsic.String.Build("{0}\gss2.ico",V.Caller.GasDir,V.Local.sIcon)
+Gui.F_ManufID..Icon(V.Local.sIcon)
+Gui.F_ManufID..Show
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.OpenMultipleManufID.End
+
+Program.Sub.ReadReceiptsBDF.Start
+'V.Args.Vendor, V.Args.BDFFile, V.Args.PartColumn, V.Args.LocColumn, V.Args.QtyColumn
+'Read BDF on PO Receipts screen and then save Vendor MID to Part
+V.Local.sError.Declare
+V.Local.sFile.Declare
+V.Local.sColumnsArr.Declare
+V.Local.sPart.Declare
+V.Local.sLoc.Declare
+V.Local.sQty.Declare
+V.Local.sSQL.Declare
+V.Local.iTotCnt.Declare
+V.Local.iCnt.Declare
+V.Local.iPart.Declare
+V.Local.iLoc.Declare
+V.Local.iQty.Declare
+F.Intrinsic.Control.Try
+
+'open BDF file and collect Column Names
+F.Intrinsic.String.Split(V.Caller.LocalGSSTempDir,"\",V.Local.sFile)
+F.Intrinsic.Math.Sub(V.Local.sFile.UBound,2,V.Local.iTotCnt)
+V.Local.sFile.RedimPreserve(0,V.Local.iTotCnt)
+F.Intrinsic.String.Join(V.Local.sFile,"\",V.Local.sFile)
+V.Local.sFile.RedimPreserve(0,0)
+F.Intrinsic.String.Build("{0}\{1}",V.Local.sFile,V.Args.BDFFile,V.Local.sFile)
+F.Intrinsic.File.File2String(V.Local.sFile,V.Local.sFile)
+F.Intrinsic.String.Split(V.Local.sFile,V.Ambient.NewLine,V.Local.sFile)
+F.Intrinsic.String.Split(V.Local.sFile(5),"|~|",V.Local.sColumnsArr)
+V.Local.sFile.Redim(0,0)
+'Get Column nums
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.Local.sColumnsArr.UBound,1)
+	F.Intrinsic.Control.SelectCase(V.Local.sColumnsArr(V.Local.iCnt).Trim)
+		F.Intrinsic.Control.Case(V.Args.PartColumn)
+			V.Local.iPart.Set(V.Local.iCnt)
+		F.Intrinsic.Control.Case(V.Args.LocColumn)
+			V.Local.iLoc.Set(V.Local.iCnt)
+		F.Intrinsic.Control.Case(V.Args.QtyColumn)
+			V.Local.iQty.Set(V.Local.iCnt)
+	F.Intrinsic.Control.EndSelect
+F.Intrinsic.Control.Next(V.Local.iCnt)
+V.Local.sColumnsArr.Redim(0,0)
+
+F.Intrinsic.BDF.Load("Parts","AUX001")
+F.Intrinsic.BDF.ReadRowCount("Parts",V.Local.iTotCnt)
+F.Intrinsic.Math.Sub(V.Local.iTotCnt,1,V.Local.iTotCnt)
+
+F.Intrinsic.Control.For(V.Local.iCnt,0,V.Local.iTotCnt,1)
+	F.Intrinsic.BDF.TextMatrix("Parts",V.Local.iPart,V.Local.iCnt,V.Local.sPart)
+	F.Intrinsic.BDF.TextMatrix("Parts",V.Local.iLoc,V.Local.iCnt,V.Local.sLoc)
+	F.Intrinsic.BDF.TextMatrix("Parts",V.Local.iQty,V.Local.iCnt,V.Local.sQty)
+	'If Qty is > 0, write vendor's manuf ID to part
+	F.Intrinsic.Control.If(V.Local.sQty.Float,>,0)
+		F.Intrinsic.String.Build("select VENDOR, MANUF_ID from GCG_5212_VEN_MID where VENDOR = '{0}';",V.Args.Vendor,V.Local.sSQL)
+		F.ODBC.Connection!con.OpenCompanyConnection
+		F.ODBC.Connection!con.OpenRecordsetRO("rstVendor",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.con!rstVendor.EOF,=,False)
+			F.Intrinsic.Control.If(V.ODBC.con!rstVendor.FieldValTrim!MANUF_ID,!=,"")
+				F.Intrinsic.String.Build("select PART, LOC, MANUF_ID from GCG_3613_ForeignPart where PART = '{0}' and LOC = '{1}';",V.Local.sPart.Trim,V.Local.sLoc.Trim,V.Local.sSQL)
+				F.ODBC.Connection!con.OpenRecordsetRW("rstPart",V.Local.sSQL)
+				F.Intrinsic.Control.If(V.ODBC.con!rstPart.EOF,=,False)
+					'Save Vendor Manuf_id to part
+					F.ODBC.con!rstPart.Set!MANUF_ID(V.ODBC.con!rstVendor.FieldValTrim!MANUF_ID)
+					F.ODBC.con!rstPart.Update
+				F.Intrinsic.Control.EndIf
+				F.ODBC.con!rstPart.Close
+			F.Intrinsic.Control.Else
+				'Saved manuf_id is empty for vendor, exit sub
+				F.ODBC.con!rstVendor.Close
+				F.ODBC.Connection!con.Close
+				F.Intrinsic.Control.ExitSub
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			'No record for vendor having a manuf_id exists, exit sub
+			F.ODBC.con!rstVendor.Close
+			F.ODBC.Connection!con.Close
+			F.Intrinsic.Control.ExitSub
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rstVendor.Close
+		F.ODBC.Connection!con.Close
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iCnt)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.ReadReceiptsBDF.End
+
+Program.Sub.ReadReceiptsWirelessLine.Start
+'V.Args.TransID
+'Read Wireless lines and write Vendor MID to Part on receipts
+V.Local.sError.Declare
+V.Local.sErrFile.Declare
+V.Local.sSQL.Declare
+V.Local.sRet.Declare
+V.Local.sPO.Declare
+V.Local.sLine.Declare
+V.Local.sVendor.Declare
+V.Local.sPart.Declare
+V.Local.sLoc.Declare
+V.Local.fQty.Declare
+F.Intrinsic.Control.Try
+
+F.ODBC.Connection!con.OpenCompanyConnection
+'Get FIELD_1 (PO), FIELD_2 (Line) and FIELD_8 (Qty)
+F.Intrinsic.String.Build("select TRANS_ID, SEQ, TRANS_TYPE, FIELD_1, FIELD_2, FIELD_8 from V_WIRELESS_LINE where TRANS_ID = '{0}' and SEQ = '0000' and TRANS_TYPE = 'P10';",V.Args.TransID,V.Local.sSQL)
+F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF)
+	'No WIRELESS_LINE entry found, write to datalog and exit
+	F.Intrinsic.String.Build("Could not find record in WIRELESS_LINES for Transaction ID {0}.",V.Args.TransID,V.Local.sError)
+	F.Intrinsic.Control.RaiseError(0,V.Local.sError)
+F.Intrinsic.Control.EndIf
+F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+V.Local.sPO.Set(V.Local.sRet(3).Trim)
+F.Intrinsic.String.Build("{0}0",V.Local.sRet(4).Trim,V.Local.sLine)
+F.Intrinsic.Math.Div(V.Local.sRet(5).Float,1000,V.Local.fQty)
+V.Local.sRet.Redim(0,0)
+F.Intrinsic.Control.If(V.Local.fQty,<=,0)
+	'Qty is not valid, write to datalog and exit
+	F.Intrinsic.String.Build("Quantity {0} was less than or equal to zero for Transaction ID {1}.",V.Local.fQty,V.Args.TransID,V.Local.sError)
+	F.Intrinsic.Control.RaiseError(0,V.Local.sError)
+F.Intrinsic.Control.EndIf
+'Get Vendor, Part and Location from PO Lines
+F.Intrinsic.String.Build("select VENDOR, PART, LOCATION from V_PO_LINES where PURCHASE_ORDER = '{0}' and RECORD_NO = '{1}';",V.Local.sPO,V.Local.sLine,V.Local.sSQL)
+F.ODBC.Connection!con.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF)
+	'Could not Locate PO and Line in DB, write to datalog
+	F.Intrinsic.String.Build("Could not find Purchase Order {0} and Line {1} in PO_LINES for Transaction ID {2}.",V.Local.sPO,V.Local.sLine,V.Args.TransID,V.Local.sError)
+	F.Intrinsic.Control.RaiseError(0,V.Local.sError)
+F.Intrinsic.Control.EndIf
+F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+V.Local.sVendor.Set(V.Local.sRet(0).Trim)
+V.Local.sPart.Set(V.Local.sRet(1).Trim)
+V.Local.sLoc.Set(V.Local.sRet(2).Trim)
+V.Local.sRet.Redim(0,0)
+'Check vendor's MID
+F.Intrinsic.String.Build("select VENDOR, MANUF_ID from GCG_5212_VEN_MID where VENDOR = '{0}';",V.Local.Vendor,V.Local.sSQL)
+F.ODBC.Connection!con.OpenRecordsetRO("rstVendor",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.con!rstVendor.EOF,=,False)
+	F.Intrinsic.Control.If(V.ODBC.con!rstVendor.FieldValTrim!MANUF_ID,!=,"")
+		F.Intrinsic.String.Build("select PART, LOC, MANUF_ID from GCG_3613_ForeignPart where PART = '{0}' and LOC = '{1}';",V.Local.sPart.Trim,V.Local.sLoc.Trim,V.Local.sSQL)
+		F.ODBC.Connection!con.OpenRecordsetRW("rstPart",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.con!rstPart.EOF,=,False)
+			'Save Vendor Manuf_id to part
+			F.ODBC.con!rstPart.Set!MANUF_ID(V.ODBC.con!rstVendor.FieldValTrim!MANUF_ID)
+			F.ODBC.con!rstPart.Update
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rstPart.Close
+	F.Intrinsic.Control.Else
+		'Saved manuf_id is empty for vendor, exit sub
+		F.ODBC.con!rstVendor.Close
+		F.ODBC.Connection!con.Close
+		F.Intrinsic.Control.ExitSub
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Else
+	'No record for vendor having a manuf_id exists, exit sub
+	F.ODBC.con!rstVendor.Close
+	F.ODBC.Connection!con.Close
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+F.ODBC.con!rstVendor.Close
+F.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("{0}\5212_PO_RECEIPT_MOBILE_ERR_{1}.txt",V.Caller.FilesDir,V.Caller.CompanyCode,V.Local.sErrFile)
+	F.Intrinsic.File.File2String(V.Local.sErrFile,V.Local.sError)
+	F.Intrinsic.String.Build("{0}Project: {1}{2}{2}Subroutine: {3}{2}Error Occurred {4} with description {5}{2}{2}GAB Version: {6}{2}{2}Date:{7} Time:{8}{2}{2} ",V.Local.sError,V.Caller.ScriptFile,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Ambient.Date.PervasiveDate,V.Ambient.Time,V.Local.sError)
+	F.Intrinsic.File.String2File(V.Local.sErrFile,V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.ReadReceiptsWirelessLine.End
